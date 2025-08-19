@@ -1,6 +1,6 @@
 """
 
-All code contributed to Exifa.net is © 2024 by Sahir Maharaj. 
+All code contributed to Exifa.net is © 2025 by Sahir Maharaj. 
 The content is licensed under the Creative Commons Attribution 4.0 International License. 
 This allows for sharing and adaptation, provided appropriate credit is given, and any changes made are indicated.
 
@@ -1174,3 +1174,4 @@ if "has_snowed" not in st.session_state:
     st.session_state["has_snowed"] = True
 if st.session_state.show_animation:
     components.html(particles_js, height=370, scrolling=False)
+
