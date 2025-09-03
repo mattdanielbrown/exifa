@@ -966,11 +966,14 @@ with st.sidebar:
                 download_image(clear)
 
 
-@st.experimental_dialog("How to use Exifa.net", width=1920)
-def show_video(item):
+dialog_decorator = getattr(st, "dialog", None) or getattr(st, "experimental_dialog", None)
+if dialog_decorator is None:
+    raise RuntimeError("Neither st.dialog nor st.experimental_dialog is available in this Streamlit version.")
+
+@dialog_decorator("How to use Exifa.net", width=1920)
+def show_video(_item=None):
     video_url = "https://www.youtube.com/watch?v=CS7rkWu7LNY"
     st.video(video_url, loop=False, autoplay=True, muted=False)
-
 
 for message in st.session_state.messages:
     with st.chat_message(message["role"], avatar=icons[message["role"]]):
@@ -1174,4 +1177,5 @@ if "has_snowed" not in st.session_state:
     st.session_state["has_snowed"] = True
 if st.session_state.show_animation:
     components.html(particles_js, height=370, scrolling=False)
+
 
