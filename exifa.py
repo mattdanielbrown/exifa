@@ -1024,78 +1024,102 @@ def get_num_tokens(prompt):
     tokens = tokenizer.tokenize(prompt)
     return len(tokens)
 
-
 def generate_arctic_response_follow_up():
+    try:
+        follow_up_response = ""
 
-    follow_up_response = ""
+        last_three_messages = st.session_state.messages[-3:]
+        for message in last_three_messages:
+            follow_up_response += "\n\n {}".format(message)
 
-    last_three_messages = st.session_state.messages[-3:]
-    for message in last_three_messages:
-        follow_up_response += "\n\n {}".format(message)
-    prompt = [
-        "Please generate one question based on the conversation thus far that the user might ask next. Ensure the question is short, less than 8 words, stays on the topic of EXIF and its importance and dangers, and is formatted with underscores instead of spaces, e.g., What_does_EXIF_mean? Conversation Info = {}. Please generate one question based on the conversation thus far that the user might ask next. Ensure the question is short, less than 8 words, stays on the topic of EXIF and its importance and dangers, and is formatted with underscores instead of spaces".format(
-            follow_up_response
-        )
-    ]
-    prompt.append("assistant\n")
-    prompt_str = "\n".join(prompt)
+        prompt = [
+            "Please generate one short follow-up question based on the conversation so far. "
+            "The question must be less than 8 words, related to EXIF data, privacy, image metadata, "
+            "or image safety, and formatted with underscores instead of spaces. "
+            f"Conversation Info = {follow_up_response}"
+        ]
 
-    full_response = []
-    for event in replicate.stream(
-        "snowflake/snowflake-arctic-instruct",
-        input={
-            "prompt": prompt_str,
-            "prompt_template": r"{prompt}",
-            "temperature": temperature,
-            "top_p": top_p,
-            "max_new_tokens": max_new_tokens,
-            "min_new_tokens": min_new_tokens,
-            "presence_penalty": presence_penalty,
-            "frequency_penalty": frequency_penalty,
-            "stop_sequences": stop_sequences,
-        },
-    ):
-        full_response.append(str(event).strip())
-    complete_response = "".join(full_response)
+        prompt.append("assistant\n")
+        prompt_str = "\n".join(prompt)
 
-    return complete_response
+        full_response = []
+
+        for event in replicate.stream(
+            "snowflake/snowflake-arctic-instruct",
+            input={
+                "prompt": prompt_str,
+                "prompt_template": r"{prompt}",
+                "temperature": min(float(temperature), 1.0),
+                "top_p": float(top_p),
+                "max_new_tokens": min(int(max_new_tokens), 128),
+                "min_new_tokens": int(min_new_tokens),
+                "presence_penalty": float(presence_penalty),
+                "frequency_penalty": float(frequency_penalty),
+                "stop_sequences": stop_sequences,
+            },
+        ):
+            full_response.append(str(event).strip())
+
+        complete_response = "".join(full_response).strip()
+
+        if not complete_response:
+            return "What_does_EXIF_reveal?"
+
+        return complete_response
+
+    except Exception:
+        return "What_does_EXIF_reveal?"
 
 
 def generate_arctic_response():
-
     prompt = [base_prompt] if base_prompt else []
+
     for dict_message in st.session_state.messages:
         if dict_message["role"] == "user":
             prompt.append("user\n" + dict_message["content"])
         else:
             prompt.append("assistant\n" + dict_message["content"])
+
     prompt.append("assistant\n")
     prompt_str = "\n".join(prompt)
 
-    if get_num_tokens(prompt_str) >= 1000000:
-        st.error("Conversation length too long. Please keep it under 1000000 tokens.")
-        st.button(
-            "🗑 Clear Chat History",
-            on_click=clear_chat_history,
-            key="clear_chat_history",
-        )
-        st.stop()
-    for event in replicate.stream(
-        "snowflake/snowflake-arctic-instruct",
-        input={
-            "prompt": prompt_str,
-            "prompt_template": r"{prompt}",
-            "temperature": temperature,
-            "top_p": top_p,
-            "max_new_tokens": max_new_tokens,
-            "min_new_tokens": min_new_tokens,
-            "presence_penalty": presence_penalty,
-            "frequency_penalty": frequency_penalty,
-            "stop_sequences": stop_sequences,
-        },
-    ):
-        yield str(event)
+    token_count = get_num_tokens(prompt_str)
 
+    if token_count >= 12000:
+        yield (
+            "The conversation or uploaded file content is too long for the model to process safely. "
+            "Please clear the chat history or upload a smaller file."
+        )
+        return
+
+    try:
+        for event in replicate.stream(
+            "snowflake/snowflake-arctic-instruct",
+            input={
+                "prompt": prompt_str,
+                "prompt_template": r"{prompt}",
+                "temperature": min(float(temperature), 1.0),
+                "top_p": float(top_p),
+                "max_new_tokens": min(int(max_new_tokens), 512),
+                "min_new_tokens": int(min_new_tokens),
+                "presence_penalty": float(presence_penalty),
+                "frequency_penalty": float(frequency_penalty),
+                "stop_sequences": stop_sequences,
+            },
+        ):
+            yield str(event)
+
+    except Exception as e:
+        error_message = str(e)
+
+        yield (
+            "Sorry, the AI model could not generate a response right now. "
+            "This is usually caused by a Replicate API issue, model availability issue, "
+            "invalid model parameters, quota limits, or a prompt that is too large. "
+            "Please try again, clear the chat, or reduce the uploaded file size."
+        )
+
+        print("Replicate streaming error:", error_message)
 
 def display_question():
     st.session_state.follow_up = True
